@@ -1,9 +1,12 @@
+mod actions;
+
+use actions::*;
+
 use anyhow::Result;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use futures_util::StreamExt;
 use openaction::*;
 use std::collections::HashMap;
-use tokio::sync::Mutex;
 use zbus::fdo::DBusProxy;
 use zbus::{Connection, MatchRule, MessageStream, MessageType, Proxy};
 use zvariant::Value;
@@ -83,8 +86,6 @@ async fn toggle_shuffle() -> Result<()> {
 	Ok(())
 }
 
-static ACTIONS: Mutex<Vec<(String, String)>> = Mutex::const_new(vec![]);
-
 async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
 	fetch_and_convert_to_data_url(
 		&metadata?
@@ -96,20 +97,11 @@ async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
 	.ok()
 }
 
-async fn update_play_pause(
-	context: String,
-	outbound: &mut OutboundEventManager,
-	image: Option<String>,
-) -> Result<()> {
-	outbound.set_image(context.clone(), image, None).await?;
-	Ok(())
+async fn update_play_pause(instance: &Instance, image: Option<String>) -> OpenActionResult<()> {
+	instance.set_image(image, None).await
 }
 
-async fn update_repeat(
-	context: String,
-	outbound: &mut OutboundEventManager,
-	loop_status: Option<&Value<'_>>,
-) -> Result<()> {
+async fn update_repeat(instance: &Instance, loop_status: Option<&Value<'_>>) -> Result<()> {
 	let state = match loop_status {
 		Some(loop_status_value) => {
 			match loop_status_value.downcast_ref::<str>().unwrap_or("None") {
@@ -121,102 +113,46 @@ async fn update_repeat(
 		}
 		_ => 0,
 	};
-	outbound.set_state(context, state).await?;
+	instance.set_state(state).await?;
 	Ok(())
 }
 
-async fn update_shuffle(
-	context: String,
-	outbound: &mut OutboundEventManager,
-	shuffle: Option<&Value<'_>>,
-) -> Result<()> {
+async fn update_shuffle(instance: &Instance, shuffle: Option<&Value<'_>>) -> Result<()> {
 	let state = shuffle
 		.and_then(|shuffle_value| shuffle_value.downcast_ref::<bool>().copied())
 		.unwrap_or(false);
-	outbound.set_state(context, state as u16).await?;
+	instance.set_state(state as u16).await?;
 	Ok(())
 }
 
-async fn update_all(outbound: &mut OutboundEventManager) {
+async fn update_all() {
 	let proxy_result = get_mpris_proxy().await;
 	let get_property = async |property: &str| match &proxy_result {
 		Ok(proxy) => proxy.get_property(property).await.ok(),
 		Err(_) => None,
 	};
-	let actions = ACTIONS.lock().await.clone();
-	for (uuid, context) in actions {
-		if let Err(error) = match uuid.as_str() {
-			"me.amankhanna.oampris.playpause" => {
-				update_play_pause(
-					context,
-					outbound,
-					get_album_art(get_property("Metadata").await.as_ref()).await,
-				)
-				.await
-			}
-			"me.amankhanna.oampris.repeat" => {
-				update_repeat(context, outbound, get_property("LoopStatus").await.as_ref()).await
-			}
-			"me.amankhanna.oampris.shuffle" => {
-				update_shuffle(context, outbound, get_property("Shuffle").await.as_ref()).await
-			}
-			_ => Ok(()),
-		} {
-			log::error!(
-				"Failed to update {}: {}",
-				uuid.trim_start_matches("me.amankhanna.oampris."),
-				error
-			);
+	for instance in visible_instances(PlayPauseAction::UUID).await {
+		if let Err(error) = update_play_pause(
+			&instance,
+			get_album_art(get_property("Metadata").await.as_ref()).await,
+		)
+		.await
+		{
+			log::error!("Failed to update PlayPause: {}", error);
 		}
 	}
-}
-
-struct GlobalEventHandler {}
-impl openaction::GlobalEventHandler for GlobalEventHandler {}
-
-struct ActionEventHandler {}
-impl openaction::ActionEventHandler for ActionEventHandler {
-	async fn will_appear(
-		&self,
-		event: AppearEvent,
-		outbound: &mut OutboundEventManager,
-	) -> EventHandlerResult {
-		ACTIONS.lock().await.push((event.action, event.context));
-		update_all(outbound).await;
-		Ok(())
-	}
-
-	async fn will_disappear(
-		&self,
-		event: AppearEvent,
-		_outbound: &mut OutboundEventManager,
-	) -> EventHandlerResult {
-		ACTIONS.lock().await.retain(|(_, c)| c != &event.context);
-		Ok(())
-	}
-
-	async fn key_up(
-		&self,
-		event: KeyEvent,
-		_outbound: &mut OutboundEventManager,
-	) -> EventHandlerResult {
-		if let Err(error) = match event.action.as_str() {
-			"me.amankhanna.oampris.playpause" => call_mpris_method("PlayPause").await,
-			"me.amankhanna.oampris.stop" => call_mpris_method("Stop").await,
-			"me.amankhanna.oampris.previous" => call_mpris_method("Previous").await,
-			"me.amankhanna.oampris.next" => call_mpris_method("Next").await,
-			"me.amankhanna.oampris.repeat" => cycle_repeat_mode().await,
-			"me.amankhanna.oampris.shuffle" => toggle_shuffle().await,
-			_ => return Ok(()),
-		} {
-			log::error!(
-				"Failed to make MPRIS call for {}: {}",
-				event.action.trim_start_matches("me.amankhanna.oampris."),
-				error
-			);
+	for instance in visible_instances(RepeatAction::UUID).await {
+		if let Err(error) =
+			update_repeat(&instance, get_property("LoopStatus").await.as_ref()).await
+		{
+			log::error!("Failed to update Repeat: {}", error);
 		}
-
-		Ok(())
+	}
+	for instance in visible_instances(ShuffleAction::UUID).await {
+		if let Err(error) = update_shuffle(&instance, get_property("Shuffle").await.as_ref()).await
+		{
+			log::error!("Failed to update Shuffle: {}", error);
+		}
 	}
 }
 
@@ -230,11 +166,7 @@ async fn watch_album_art() {
 	};
 
 	loop {
-		let mut outbound = OUTBOUND_EVENT_MANAGER.lock().await;
-		if let Some(manager) = outbound.as_mut() {
-			let _ = update_all(manager).await;
-		}
-		drop(outbound);
+		update_all().await;
 
 		let player_name = match find_active_player(&connection).await {
 			Ok(name) => name,
@@ -303,10 +235,11 @@ async fn watch_album_art() {
 
 			let member = header.member().ok().flatten().map(|m| m.to_string());
 			if member.as_deref() == Some("NameOwnerChanged") {
-				if let Ok((name, _old_owner, new_owner)) = msg.body::<(String, String, String)>() {
-					if name == player_name && new_owner.is_empty() {
-						break;
-					}
+				if let Ok((name, _old_owner, new_owner)) = msg.body::<(String, String, String)>()
+					&& name == player_name
+					&& new_owner.is_empty()
+				{
+					break;
 				}
 				continue;
 			} else if member.as_deref() != Some("PropertiesChanged") {
@@ -326,52 +259,32 @@ async fn watch_album_art() {
 				continue;
 			}
 
-			let actions = ACTIONS.lock().await.clone();
-			let mut outbound = OUTBOUND_EVENT_MANAGER.lock().await;
-			let Some(outbound) = outbound.as_mut() else {
+			if let Some(playback_status_value) = changed_properties.get("PlaybackStatus")
+				&& playback_status_value.downcast_ref::<str>() == Some("Stopped")
+			{
+				update_all().await;
 				continue;
-			};
-
-			if let Some(playback_status_value) = changed_properties.get("PlaybackStatus") {
-				if playback_status_value.downcast_ref::<str>() == Some("Stopped") {
-					update_all(outbound).await;
-					continue;
-				}
 			}
 
 			let album_art_url = get_album_art(changed_properties.get("Metadata")).await;
 
-			for (uuid, context) in actions {
-				if let Err(error) = match uuid.as_str() {
-					"me.amankhanna.oampris.playpause"
-						if changed_properties.contains_key("Metadata") =>
-					{
-						update_play_pause(context.clone(), outbound, album_art_url.clone()).await
-					}
-					"me.amankhanna.oampris.repeat"
-						if changed_properties.contains_key("LoopStatus") =>
-					{
-						update_repeat(
-							context.clone(),
-							outbound,
-							changed_properties.get("LoopStatus"),
-						)
-						.await
-					}
-					"me.amankhanna.oampris.shuffle"
-						if changed_properties.contains_key("Shuffle") =>
-					{
-						update_shuffle(context.clone(), outbound, changed_properties.get("Shuffle"))
-							.await
-					}
-					_ => continue,
-				} {
-					log::error!(
-						"Failed to update {} at {}: {}",
-						uuid.trim_start_matches("me.amankhanna.oampris."),
-						context,
-						error
-					);
+			for instance in visible_instances(PlayPauseAction::UUID).await {
+				if let Err(error) = update_play_pause(&instance, album_art_url.clone()).await {
+					log::error!("Failed to update PlayPause: {}", error);
+				}
+			}
+			for instance in visible_instances(RepeatAction::UUID).await {
+				if let Err(error) =
+					update_repeat(&instance, changed_properties.get("LoopStatus")).await
+				{
+					log::error!("Failed to update Repeat: {}", error);
+				}
+			}
+			for instance in visible_instances(ShuffleAction::UUID).await {
+				if let Err(error) =
+					update_shuffle(&instance, changed_properties.get("Shuffle")).await
+				{
+					log::error!("Failed to update Shuffle: {}", error);
 				}
 			}
 		}
@@ -379,7 +292,7 @@ async fn watch_album_art() {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> OpenActionResult<()> {
 	if let Err(error) = simplelog::TermLogger::init(
 		simplelog::LevelFilter::Debug,
 		simplelog::Config::default(),
@@ -389,9 +302,14 @@ async fn main() {
 		eprintln!("Logger initialization failed: {}", error);
 	}
 
+	register_action(PlayPauseAction {}).await;
+	register_action(StopAction {}).await;
+	register_action(PreviousAction {}).await;
+	register_action(NextAction {}).await;
+	register_action(RepeatAction {}).await;
+	register_action(ShuffleAction {}).await;
+
 	tokio::spawn(watch_album_art());
 
-	if let Err(error) = init_plugin(GlobalEventHandler {}, ActionEventHandler {}).await {
-		log::error!("Failed to initialise plugin: {}", error);
-	}
+	run(std::env::args().collect()).await
 }
