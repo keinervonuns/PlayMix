@@ -1,4 +1,4 @@
-use super::{call_mpris_method, cycle_repeat_mode, seek, toggle_shuffle, update_all};
+use super::{call_mpris_method, update_all};
 
 use std::collections::HashMap;
 
@@ -16,9 +16,45 @@ impl Action for PlayPauseAction {
 	}
 
 	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		log::info!("PlayPause key_up triggered");
 		if let Err(error) = call_mpris_method("PlayPause").await {
 			log::error!("Failed to make PlayPause MPRIS call: {}", error);
 		}
+		Ok(())
+	}
+}
+
+pub struct VolumeDialAction;
+#[async_trait]
+impl Action for VolumeDialAction {
+	const UUID: ActionUuid = "PlayMix.volumedialaction";
+	type Settings = HashMap<String, String>;
+
+	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		update_all().await;
+		Ok(())
+	}
+
+	async fn dial_rotate(
+		&self,
+		_: &Instance,
+		_: &Self::Settings,
+		ticks: i16,
+		_pressed: bool,
+	) -> OpenActionResult<()> {
+		let volume_change = if ticks > 0 {
+			format!("{}%+", ticks.abs() * 5)
+		} else {
+			format!("{}%-", ticks.abs() * 5)
+		};
+		
+		if let Err(error) = std::process::Command::new("wpctl")
+			.args(&["set-volume", "@DEFAULT_AUDIO_SINK@", &volume_change, "--limit", "1.0"])
+			.output()
+		{
+			log::error!("Failed to change volume: {}", error);
+		}
+		
 		Ok(())
 	}
 }
@@ -75,82 +111,6 @@ impl Action for NextAction {
 	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
 		if let Err(error) = call_mpris_method("Next").await {
 			log::error!("Failed to make Next MPRIS call: {}", error);
-		}
-		Ok(())
-	}
-}
-
-pub struct RepeatAction;
-#[async_trait]
-impl Action for RepeatAction {
-	const UUID: ActionUuid = "PlayMix.repeat";
-	type Settings = HashMap<String, String>;
-
-	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		update_all().await;
-		Ok(())
-	}
-
-	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		if let Err(error) = cycle_repeat_mode().await {
-			log::error!("Failed to make Repeat MPRIS call: {}", error);
-		}
-		Ok(())
-	}
-}
-
-pub struct ShuffleAction;
-#[async_trait]
-impl Action for ShuffleAction {
-	const UUID: ActionUuid = "PlayMix.shuffle";
-	type Settings = HashMap<String, String>;
-
-	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		update_all().await;
-		Ok(())
-	}
-
-	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		if let Err(error) = toggle_shuffle().await {
-			log::error!("Failed to make Shuffle MPRIS call: {}", error);
-		}
-		Ok(())
-	}
-}
-
-pub struct SeekBackwardsAction;
-#[async_trait]
-impl Action for SeekBackwardsAction {
-	const UUID: ActionUuid = "PlayMix.seekbackwards";
-	type Settings = HashMap<String, String>;
-
-	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		update_all().await;
-		Ok(())
-	}
-
-	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		if let Err(error) = seek(-10_000_000).await {
-			log::error!("Failed to make Seek MPRIS call: {}", error);
-		}
-		Ok(())
-	}
-}
-
-pub struct SeekForwardsAction;
-#[async_trait]
-impl Action for SeekForwardsAction {
-	const UUID: ActionUuid = "PlayMix.seekforwards";
-	type Settings = HashMap<String, String>;
-
-	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		update_all().await;
-		Ok(())
-	}
-
-	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		if let Err(error) = seek(10_000_000).await {
-			log::error!("Failed to make Seek MPRIS call: {}", error);
 		}
 		Ok(())
 	}

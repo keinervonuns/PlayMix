@@ -67,32 +67,6 @@ async fn call_mpris_method(method: &str) -> Result<()> {
 	Ok(())
 }
 
-async fn cycle_repeat_mode() -> Result<()> {
-	let proxy = get_mpris_proxy().await?;
-	let current: String = proxy.get_property("LoopStatus").await?;
-	let next = match current.as_str() {
-		"None" => "Playlist",
-		"Playlist" => "Track",
-		"Track" => "None",
-		_ => "None",
-	};
-	proxy.set_property("LoopStatus", next).await?;
-	Ok(())
-}
-
-async fn toggle_shuffle() -> Result<()> {
-	let proxy = get_mpris_proxy().await?;
-	let shuffle: bool = proxy.get_property("Shuffle").await?;
-	proxy.set_property("Shuffle", &(!shuffle)).await?;
-	Ok(())
-}
-
-async fn seek(offset_microseconds: i64) -> Result<()> {
-	let proxy = get_mpris_proxy().await?;
-	proxy.call_method("Seek", &(offset_microseconds,)).await?;
-	Ok(())
-}
-
 async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
 	let dict = metadata?.downcast_ref::<zvariant::Dict>().ok()?;
 	let url: String = dict.get(&Value::from("mpris:artUrl")).ok()??;
@@ -101,34 +75,6 @@ async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
 
 async fn update_play_pause(instance: &Instance, image: Option<String>) -> OpenActionResult<()> {
 	instance.set_image(image, None).await
-}
-
-async fn update_repeat(instance: &Instance, loop_status: Option<&Value<'_>>) -> Result<()> {
-	let state = match loop_status {
-		Some(loop_status_value) => {
-			if let Ok(status_str) = loop_status_value.downcast_ref::<zvariant::Str>() {
-				match status_str.as_str() {
-					"None" => 0,
-					"Playlist" => 1,
-					"Track" => 2,
-					_ => 0,
-				}
-			} else {
-				0
-			}
-		}
-		_ => 0,
-	};
-	instance.set_state(state).await?;
-	Ok(())
-}
-
-async fn update_shuffle(instance: &Instance, shuffle: Option<&Value<'_>>) -> Result<()> {
-	let state = shuffle
-		.and_then(|shuffle_value| shuffle_value.downcast_ref::<bool>().ok())
-		.unwrap_or(false);
-	instance.set_state(state as u16).await?;
-	Ok(())
 }
 
 async fn update_all() {
@@ -145,19 +91,6 @@ async fn update_all() {
 		.await
 		{
 			log::error!("Failed to update PlayPause: {}", error);
-		}
-	}
-	for instance in visible_instances(RepeatAction::UUID).await {
-		if let Err(error) =
-			update_repeat(&instance, get_property("LoopStatus").await.as_ref()).await
-		{
-			log::error!("Failed to update Repeat: {}", error);
-		}
-	}
-	for instance in visible_instances(ShuffleAction::UUID).await {
-		if let Err(error) = update_shuffle(&instance, get_property("Shuffle").await.as_ref()).await
-		{
-			log::error!("Failed to update Shuffle: {}", error);
 		}
 	}
 }
@@ -275,20 +208,7 @@ async fn watch_album_art() {
 				if let Err(error) = update_play_pause(&instance, album_art_url.clone()).await {
 					log::error!("Failed to update PlayPause: {}", error);
 				}
-			}
-			for instance in visible_instances(RepeatAction::UUID).await {
-				if let Err(error) =
-					update_repeat(&instance, changed_properties.get("LoopStatus")).await
-				{
-					log::error!("Failed to update Repeat: {}", error);
-				}
-			}
-			for instance in visible_instances(ShuffleAction::UUID).await {
-				if let Err(error) =
-					update_shuffle(&instance, changed_properties.get("Shuffle")).await
-				{
-					log::error!("Failed to update Shuffle: {}", error);
-				}
+
 			}
 		}
 	}
@@ -296,23 +216,21 @@ async fn watch_album_art() {
 
 #[tokio::main]
 async fn main() -> OpenActionResult<()> {
-	if let Err(error) = simplelog::TermLogger::init(
-		simplelog::LevelFilter::Debug,
+	simplelog::TermLogger::init(
+		simplelog::LevelFilter::Info,
 		simplelog::Config::default(),
 		simplelog::TerminalMode::Stdout,
 		simplelog::ColorChoice::Never,
-	) {
-		eprintln!("Logger initialization failed: {}", error);
-	}
+	)
+	.unwrap();
+
+	// log::info!("Args: {:?}", std::env::args().collect::<Vec<_>>());
 
 	register_action(PlayPauseAction {}).await;
 	register_action(StopAction {}).await;
 	register_action(PreviousAction {}).await;
 	register_action(NextAction {}).await;
-	register_action(RepeatAction {}).await;
-	register_action(ShuffleAction {}).await;
-	register_action(SeekBackwardsAction {}).await;
-	register_action(SeekForwardsAction {}).await;
+	register_action(VolumeDialAction {}).await;
 
 	tokio::spawn(watch_album_art());
 
