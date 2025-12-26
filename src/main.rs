@@ -8,7 +8,8 @@ use futures_util::StreamExt;
 use openaction::*;
 use std::collections::HashMap;
 use zbus::fdo::DBusProxy;
-use zbus::{Connection, MatchRule, MessageStream, MessageType, Proxy};
+use zbus::{Connection, MatchRule, MessageStream, Proxy};
+use zbus::message::Type as MessageType;
 use zvariant::Value;
 
 async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
@@ -93,14 +94,9 @@ async fn seek(offset_microseconds: i64) -> Result<()> {
 }
 
 async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
-	fetch_and_convert_to_data_url(
-		&metadata?
-			.downcast_ref::<zvariant::Dict>()
-			.and_then(|dict| dict.get::<str, str>("mpris:artUrl").ok().flatten())
-			.map(|url| url.to_string())?,
-	)
-	.await
-	.ok()
+	let dict = metadata?.downcast_ref::<zvariant::Dict>().ok()?;
+	let url: String = dict.get(&Value::from("mpris:artUrl")).ok()??;
+	fetch_and_convert_to_data_url(&url).await.ok()
 }
 
 async fn update_play_pause(instance: &Instance, image: Option<String>) -> OpenActionResult<()> {
@@ -110,11 +106,15 @@ async fn update_play_pause(instance: &Instance, image: Option<String>) -> OpenAc
 async fn update_repeat(instance: &Instance, loop_status: Option<&Value<'_>>) -> Result<()> {
 	let state = match loop_status {
 		Some(loop_status_value) => {
-			match loop_status_value.downcast_ref::<str>().unwrap_or("None") {
-				"None" => 0,
-				"Playlist" => 1,
-				"Track" => 2,
-				_ => 0,
+			if let Ok(status_str) = loop_status_value.downcast_ref::<zvariant::Str>() {
+				match status_str.as_str() {
+					"None" => 0,
+					"Playlist" => 1,
+					"Track" => 2,
+					_ => 0,
+				}
+			} else {
+				0
 			}
 		}
 		_ => 0,
@@ -125,7 +125,7 @@ async fn update_repeat(instance: &Instance, loop_status: Option<&Value<'_>>) -> 
 
 async fn update_shuffle(instance: &Instance, shuffle: Option<&Value<'_>>) -> Result<()> {
 	let state = shuffle
-		.and_then(|shuffle_value| shuffle_value.downcast_ref::<bool>().copied())
+		.and_then(|shuffle_value| shuffle_value.downcast_ref::<bool>().ok())
 		.unwrap_or(false);
 	instance.set_state(state as u16).await?;
 	Ok(())
@@ -231,17 +231,12 @@ async fn watch_album_art() {
 				}
 			};
 
-			let header = match msg.header() {
-				Ok(h) => h,
-				Err(error) => {
-					log::error!("Failed to get message header: {}", error);
-					continue;
-				}
-			};
+			let header = msg.header();
 
-			let member = header.member().ok().flatten().map(|m| m.to_string());
+			let member = header.member().map(|m| m.to_string());
 			if member.as_deref() == Some("NameOwnerChanged") {
-				if let Ok((name, _old_owner, new_owner)) = msg.body::<(String, String, String)>()
+				let body = msg.body();
+				if let Ok((name, _old_owner, new_owner)) = body.deserialize::<(String, String, String)>()
 					&& name == player_name
 					&& new_owner.is_empty()
 				{
@@ -252,8 +247,8 @@ async fn watch_album_art() {
 				continue;
 			}
 
-			let body: Result<(String, HashMap<String, Value>, Vec<String>), _> = msg.body();
-			let (interface, changed_properties, _) = match body {
+			let body = msg.body();
+			let (interface, changed_properties, _): (String, HashMap<String, Value>, Vec<String>) = match body.deserialize() {
 				Ok(b) => b,
 				Err(error) => {
 					log::error!("Error reading message body: {}", error);
@@ -265,11 +260,13 @@ async fn watch_album_art() {
 				continue;
 			}
 
-			if let Some(playback_status_value) = changed_properties.get("PlaybackStatus")
-				&& playback_status_value.downcast_ref::<str>() == Some("Stopped")
-			{
-				update_all().await;
-				continue;
+			if let Some(playback_status_value) = changed_properties.get("PlaybackStatus") {
+				if let Ok(status_str) = playback_status_value.downcast_ref::<zvariant::Str>() {
+					if status_str.as_str() == "Stopped" {
+						update_all().await;
+						continue;
+					}
+				}
 			}
 
 			let album_art_url = get_album_art(changed_properties.get("Metadata")).await;
