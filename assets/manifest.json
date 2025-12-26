@@ -1,18 +1,17 @@
 {
-	"Name": "Linux Media",
-	"Author": "nekename",
-	"Version": "1.3.0",
-	"Category": "Media",
+	"Name": "PlayMix",
+	"Author": "keinervonuns",
+	"Version": "1.3.1",
+	"Category": "PlayMix",
 	"Icon": "icons/playpause",
 	"OS": [{ "Platform": "linux" }],
 	"CodePaths": {
-		"x86_64-unknown-linux-gnu": "oampris-x86_64-unknown-linux-gnu",
-		"aarch64-unknown-linux-gnu": "oampris-aarch64-unknown-linux-gnu"
+		"x86_64-unknown-linux-gnu": "playmix-x86_64-unknown-linux-gnu"
 	},
-	"CodePathLin": "oampris-x86_64-unknown-linux-gnu",
+	"CodePathLin": "playmix-x86_64-unknown-linux-gnu",
 	"Actions": [
 		{
-			"UUID": "me.amankhanna.oampris.playpause",
+			"UUID": "PlayMix.playpause",
 			"Name": "Play/Pause",
 			"Icon": "icons/playpause",
 			"Tooltip": "Toggle the playback state",
@@ -20,7 +19,7 @@
 			"States": [{ "Image": "actionDefaultImage" }]
 		},
 		{
-			"UUID": "me.amankhanna.oampris.stop",
+			"UUID": "PlayMix.stop",
 			"Name": "Stop",
 			"Icon": "icons/stop",
 			"Tooltip": "Stop playback",
@@ -28,7 +27,7 @@
 			"States": [{ "Image": "actionDefaultImage" }]
 		},
 		{
-			"UUID": "me.amankhanna.oampris.previous",
+			"UUID": "PlayMix.previous",
 			"Name": "Previous",
 			"Icon": "icons/previous",
 			"Tooltip": "Go to the previous track",
@@ -36,7 +35,7 @@
 			"States": [{ "Image": "actionDefaultImage" }]
 		},
 		{
-			"UUID": "me.amankhanna.oampris.next",
+			"UUID": "PlayMix.next",
 			"Name": "Next",
 			"Icon": "icons/next",
 			"Tooltip": "Go to the next track",
@@ -44,7 +43,7 @@
 			"States": [{ "Image": "actionDefaultImage" }]
 		},
 		{
-			"UUID": "me.amankhanna.oampris.repeat",
+			"UUID": "PlayMix.repeat",
 			"Name": "Repeat",
 			"Icon": "icons/repeat_playlist",
 			"Tooltip": "Cycle the repeat mode",
@@ -53,7 +52,7 @@
 			"DisableAutomaticStates": true
 		},
 		{
-			"UUID": "me.amankhanna.oampris.shuffle",
+			"UUID": "PlayMix.shuffle",
 			"Name": "Shuffle",
 			"Icon": "icons/shuffle_on",
 			"Tooltip": "Toggle shuffle",
@@ -62,7 +61,7 @@
 			"DisableAutomaticStates": true
 		},
 		{
-			"UUID": "me.amankhanna.oampris.seekbackwards",
+			"UUID": "PlayMix.seekbackwards",
 			"Name": "Seek Backwards",
 			"Icon": "icons/seek_backwards",
 			"Tooltip": "Seek 10 seconds backwards",
@@ -70,7 +69,7 @@
 			"States": [{ "Image": "actionDefaultImage" }]
 		},
 		{
-			"UUID": "me.amankhanna.oampris.seekforwards",
+			"UUID": "PlayMix.seekforwards",
 			"Name": "Seek Forwards",
 			"Icon": "icons/seek_forwards",
 			"Tooltip": "Seek 10 seconds forwards",

@@ -7,7 +7,7 @@ use openaction::*;
 pub struct PlayPauseAction;
 #[async_trait]
 impl Action for PlayPauseAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.playpause";
+	const UUID: ActionUuid = "PlayMix.playpause";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -26,7 +26,7 @@ impl Action for PlayPauseAction {
 pub struct StopAction;
 #[async_trait]
 impl Action for StopAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.stop";
+	const UUID: ActionUuid = "PlayMix.stop";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -45,7 +45,7 @@ impl Action for StopAction {
 pub struct PreviousAction;
 #[async_trait]
 impl Action for PreviousAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.previous";
+	const UUID: ActionUuid = "PlayMix.previous";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -64,7 +64,7 @@ impl Action for PreviousAction {
 pub struct NextAction;
 #[async_trait]
 impl Action for NextAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.next";
+	const UUID: ActionUuid = "PlayMix.next";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -83,7 +83,7 @@ impl Action for NextAction {
 pub struct RepeatAction;
 #[async_trait]
 impl Action for RepeatAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.repeat";
+	const UUID: ActionUuid = "PlayMix.repeat";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -102,7 +102,7 @@ impl Action for RepeatAction {
 pub struct ShuffleAction;
 #[async_trait]
 impl Action for ShuffleAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.shuffle";
+	const UUID: ActionUuid = "PlayMix.shuffle";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -121,7 +121,7 @@ impl Action for ShuffleAction {
 pub struct SeekBackwardsAction;
 #[async_trait]
 impl Action for SeekBackwardsAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.seekbackwards";
+	const UUID: ActionUuid = "PlayMix.seekbackwards";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
@@ -140,7 +140,7 @@ impl Action for SeekBackwardsAction {
 pub struct SeekForwardsAction;
 #[async_trait]
 impl Action for SeekForwardsAction {
-	const UUID: ActionUuid = "me.amankhanna.oampris.seekforwards";
+	const UUID: ActionUuid = "PlayMix.seekforwards";
 	type Settings = HashMap<String, String>;
 
 	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {

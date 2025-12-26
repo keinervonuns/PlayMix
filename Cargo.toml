@@ -1,5 +1,5 @@
 [package]
-name = "oampris"
+name = "playmix"
 edition = "2024"
 
 [dependencies]
