@@ -1,28 +1,9 @@
-use super::{call_mpris_method, update_all};
+use super::{call_mpris_method, update_all, ENCODER_PRESSED};
 
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 
 use openaction::*;
-
-pub struct PlayPauseAction;
-#[async_trait]
-impl Action for PlayPauseAction {
-	const UUID: ActionUuid = "PlayMix.playpause";
-	type Settings = HashMap<String, String>;
-
-	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		update_all().await;
-		Ok(())
-	}
-
-	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
-		log::info!("PlayPause key_up triggered");
-		if let Err(error) = call_mpris_method("PlayPause").await {
-			log::error!("Failed to make PlayPause MPRIS call: {}", error);
-		}
-		Ok(())
-	}
-}
 
 pub struct VolumeDialAction;
 #[async_trait]
@@ -42,6 +23,10 @@ impl Action for VolumeDialAction {
 		ticks: i16,
 		_pressed: bool,
 	) -> OpenActionResult<()> {
+		if ENCODER_PRESSED.load(Ordering::Relaxed) {
+			log::info!("Volume dial rotated while pressed; ignoring rotation");
+			return Ok(());
+		}
 		let volume_change = if ticks > 0 {
 			format!("{}%+", ticks.abs() * 5)
 		} else {
@@ -55,6 +40,75 @@ impl Action for VolumeDialAction {
 			log::error!("Failed to change volume: {}", error);
 		}
 		
+		Ok(())
+	}
+
+	async fn dial_down(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		ENCODER_PRESSED.store(true, Ordering::Relaxed);
+		log::info!("Volume dial pressed");
+		Ok(())
+	}
+
+	async fn dial_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		ENCODER_PRESSED.store(false, Ordering::Relaxed);
+		log::info!("Volume dial released");
+		Ok(())
+	}
+}
+
+pub struct DialTestAction;
+#[async_trait]
+impl Action for DialTestAction {
+	const UUID: ActionUuid = "PlayMix.dialtestaction";
+	type Settings = HashMap<String, String>;
+
+	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		update_all().await;
+		Ok(())
+	}
+
+	async fn dial_rotate(
+		&self,
+		instance: &Instance,
+		_: &Self::Settings,
+		ticks: i16,
+		_pressed: bool,
+	) -> OpenActionResult<()> {
+		log::info!("Dial rotated on instance {}: ticks = {}", instance.instance_id, ticks);
+		log::info!("Dial pressed state: {}", ENCODER_PRESSED.load(Ordering::Relaxed));
+		Ok(())
+		
+	}
+
+	async fn dial_down(&self, instance: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		ENCODER_PRESSED.store(true, Ordering::Relaxed);
+		log::info!("Dial button pressed on instance {}", instance.instance_id);
+		Ok(())
+	}
+
+	async fn dial_up(&self, instance: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		ENCODER_PRESSED.store(false, Ordering::Relaxed);
+		log::info!("Dial button released on instance {}", instance.instance_id);
+		Ok(())
+	}
+}
+
+pub struct PlayPauseAction;
+#[async_trait]
+impl Action for PlayPauseAction {
+	const UUID: ActionUuid = "PlayMix.playpause";
+	type Settings = HashMap<String, String>;
+
+	async fn will_appear(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		update_all().await;
+		Ok(())
+	}
+
+	async fn key_up(&self, _: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
+		log::info!("PlayPause key_up triggered");
+		if let Err(error) = call_mpris_method("PlayPause").await {
+			log::error!("Failed to make PlayPause MPRIS call: {}", error);
+		}
 		Ok(())
 	}
 }

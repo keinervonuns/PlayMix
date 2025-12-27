@@ -1,7 +1,7 @@
 {
 	"Name": "PlayMix",
 	"Author": "keinervonuns",
-	"Version": "1.4.0",
+	"Version": "1.4.1",
 	"Category": "PlayMix",
 	"Icon": "icons/playpause",
 	"OS": [{ "Platform": "linux" }],
@@ -12,9 +12,17 @@
 	"Actions": [
 		{
 			"UUID": "PlayMix.volumedialaction",
-			"Name": "Play/Pause",
+			"Name": "Volume dial",
 			"Icon": "icons/globe",
 			"Tooltip": "Adjust Volume",
+			"Controllers": ["Encoder"],
+			"States": [{ "Image": "actionDefaultImage" }]
+		},
+		{
+			"UUID": "PlayMix.dialtestaction",
+			"Name": "Dial test",
+			"Icon": "icons/globe",
+			"Tooltip": "Test Dial",
 			"Controllers": ["Encoder"],
 			"States": [{ "Image": "actionDefaultImage" }]
 		},

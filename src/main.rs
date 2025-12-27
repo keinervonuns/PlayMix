@@ -7,10 +7,13 @@ use base64::{Engine as _, engine::general_purpose};
 use futures_util::StreamExt;
 use openaction::*;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool};
 use zbus::fdo::DBusProxy;
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 use zbus::message::Type as MessageType;
 use zvariant::Value;
+
+pub static ENCODER_PRESSED: AtomicBool = AtomicBool::new(false);
 
 async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
 	let bytes = if url.starts_with("data:") {
@@ -231,6 +234,7 @@ async fn main() -> OpenActionResult<()> {
 	register_action(PreviousAction {}).await;
 	register_action(NextAction {}).await;
 	register_action(VolumeDialAction {}).await;
+	register_action(DialTestAction {}).await;
 
 	tokio::spawn(watch_album_art());
 
