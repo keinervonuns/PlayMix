@@ -55,3 +55,7 @@ To add icons for additional applications:
 The plugin searches for icons using the process binary name from PulseAudio sink input properties.
 
 **Note**: While button action icons can be SVG, application icons displayed on the volume dial must be PNG format.
+
+---
+
+**Disclaimer**: This project was developed with assistance from AI coding tools.
