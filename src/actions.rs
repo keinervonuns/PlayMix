@@ -1,4 +1,4 @@
-use super::{get_mpris_proxy, get_album_art, call_mpris_method, update_all, fetch_and_convert_to_data_url, ENCODER_PRESSED, CURRENT_AUDIO_APP_INDEX, SELECTED_SINK_INPUT};
+use super::{get_mpris_proxy, get_album_art, call_mpris_method, update_all, fetch_and_convert_to_data_url, ENCODER_PRESSED, DIAL_STATES};
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -7,7 +7,11 @@ use openaction::*;
 
 /// Updates the dial image based on the currently selected sink input
 pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenActionResult<()> {
-	let selected = SELECTED_SINK_INPUT.load(Ordering::Relaxed);
+	// Get the selected sink input for this instance
+	let selected = {
+		let states = DIAL_STATES.lock().unwrap();
+		states.get(&instance.instance_id).map(|(_, sink)| *sink).unwrap_or(0)
+	};
 	log::info!("Updating dial image for selected sink input ID: {}, instance: {:?}", selected, instance.instance_id);
 	if selected == 0 {
 		// Master volume - set to volume icon
@@ -183,7 +187,12 @@ impl Action for VolumeDialAction {
 				
 				// Total items = 1 (master) + number of sink inputs
 				let total_items = sink_inputs.len() + 1;
-				let current_index = CURRENT_AUDIO_APP_INDEX.load(Ordering::Relaxed);
+				
+				// Get current index for this instance
+				let current_index = {
+					let states = DIAL_STATES.lock().unwrap();
+					states.get(&instance.instance_id).map(|(idx, _)| *idx).unwrap_or(0)
+				};
 				
 				// Calculate new index based on rotation direction
 				let new_index = if ticks > 0 {
@@ -196,20 +205,17 @@ impl Action for VolumeDialAction {
 					}
 				};
 				
-				CURRENT_AUDIO_APP_INDEX.store(new_index, Ordering::Relaxed);
-				
-				if new_index == 0 {
+				// Update state for this instance
+				let sink_input_id = if new_index == 0 {
 					// Master volume selected
-					SELECTED_SINK_INPUT.store(0, Ordering::Relaxed);
 					log::info!("Switched to: Master Volume (1 of {})", total_items);
+					0
 				} else {
 					// Specific app selected (index - 1 because master is at 0)
 					let sink_index = new_index - 1;
 					if let Some(sink_input_line) = sink_inputs.get(sink_index) {
 						if let Some(sink_input_id_str) = sink_input_line.split_whitespace().next() {
 							if let Ok(sink_input_id) = sink_input_id_str.parse::<usize>() {
-								SELECTED_SINK_INPUT.store(sink_input_id, Ordering::Relaxed);
-								
 								// Get application name for logging
 								if let Ok(info_output) = std::process::Command::new("pactl")
 									.args(&["list", "sink-inputs"])
@@ -231,10 +237,20 @@ impl Action for VolumeDialAction {
 									log::info!("Switched to audio app: {} [{}] (ID: {}, {} of {})", 
 										app_name, process_binary, sink_input_id, new_index + 1, total_items);
 								}
+								sink_input_id
+							} else {
+								0
 							}
+						} else {
+							0
 						}
+					} else {
+						0
 					}
-				}
+				};
+				
+				// Store updated state for this instance
+				DIAL_STATES.lock().unwrap().insert(instance.instance_id.clone(), (new_index, sink_input_id));
 				
 				// Update the image for the selected sink
 				update_dial_image_for_selected_sink(instance).await?;
@@ -244,8 +260,11 @@ impl Action for VolumeDialAction {
 			return Ok(());
 		}
 		
-		// Volume control when not pressed - adjust selected source
-		let selected = SELECTED_SINK_INPUT.load(Ordering::Relaxed);
+		// Volume control when not pressed - adjust selected source for this instance
+		let selected = {
+			let states = DIAL_STATES.lock().unwrap();
+			states.get(&instance.instance_id).map(|(_, sink)| *sink).unwrap_or(0)
+		};
 		
 		if selected == 0 {
 			// Master volume

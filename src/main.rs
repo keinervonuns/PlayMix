@@ -6,16 +6,18 @@ use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose};
 use futures_util::StreamExt;
 use openaction::*;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::{Mutex, atomic::{AtomicBool}};
 use zbus::fdo::DBusProxy;
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 use zbus::message::Type as MessageType;
 use zvariant::Value;
 
 pub static ENCODER_PRESSED: AtomicBool = AtomicBool::new(false);
-pub static CURRENT_AUDIO_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
-pub static SELECTED_SINK_INPUT: AtomicUsize = AtomicUsize::new(0); // 0 = master volume
+
+// Per-instance state: (current_audio_app_index, selected_sink_input)
+pub static DIAL_STATES: Lazy<Mutex<HashMap<String, (usize, usize)>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
 	let bytes = if url.starts_with("data:") {
