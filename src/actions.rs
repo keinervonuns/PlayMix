@@ -245,29 +245,41 @@ impl Action for VolumeDialAction {
 		}
 		
 		// Volume control when not pressed - adjust selected source
-		let volume_change = if ticks > 0 {
-			format!("{}%+", ticks.abs() * 5)
-		} else {
-			format!("{}%-", ticks.abs() * 5)
-		};
-		
 		let selected = SELECTED_SINK_INPUT.load(Ordering::Relaxed);
 		
 		if selected == 0 {
 			// Master volume
+			let volume_change = if ticks > 0 {
+				format!("{}%+", ticks.abs() * 5)
+			} else {
+				format!("{}%-", ticks.abs() * 5)
+			};
+			
 			if let Err(error) = std::process::Command::new("wpctl")
 				.args(&["set-volume", "@DEFAULT_AUDIO_SINK@", &volume_change, "--limit", "1.0"])
 				.output()
 			{
 				log::error!("Failed to change master volume: {}", error);
+			} else {
+				log::info!("Changed master volume by {}", volume_change);
 			}
 		} else {
-			// Specific app volume
+			// Specific app volume - pactl uses +/- prefix format
+			let volume_change = if ticks > 0 {
+				format!("+{}%", ticks.abs() * 5)
+			} else {
+				format!("-{}%", ticks.abs() * 5)
+			};
+			
+			log::info!("Changing app {} volume by {}", selected, volume_change);
+			
 			if let Err(error) = std::process::Command::new("pactl")
 				.args(&["set-sink-input-volume", &selected.to_string(), &volume_change])
 				.output()
 			{
 				log::error!("Failed to change app volume: {}", error);
+			} else {
+				log::info!("Changed app {} volume by {}", selected, volume_change);
 			}
 		}
 		
