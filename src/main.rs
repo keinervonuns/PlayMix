@@ -7,13 +7,15 @@ use base64::{Engine as _, engine::general_purpose};
 use futures_util::StreamExt;
 use openaction::*;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use zbus::fdo::DBusProxy;
 use zbus::{Connection, MatchRule, MessageStream, Proxy};
 use zbus::message::Type as MessageType;
 use zvariant::Value;
 
 pub static ENCODER_PRESSED: AtomicBool = AtomicBool::new(false);
+pub static CURRENT_AUDIO_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
+pub static SELECTED_SINK_INPUT: AtomicUsize = AtomicUsize::new(0); // 0 = master volume
 
 async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
 	let bytes = if url.starts_with("data:") {
@@ -211,7 +213,11 @@ async fn watch_album_art() {
 				if let Err(error) = update_play_pause(&instance, album_art_url.clone()).await {
 					log::error!("Failed to update PlayPause: {}", error);
 				}
-
+			}
+			for instance in visible_instances(VolumeDialAction::UUID).await {
+				update_dial_image_for_selected_sink(&instance).await.unwrap_or_else(|e| {
+					log::error!("Failed to update dial image: {}", e);
+				});
 			}
 		}
 	}

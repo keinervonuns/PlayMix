@@ -1,7 +1,7 @@
 {
 	"Name": "PlayMix",
 	"Author": "keinervonuns",
-	"Version": "1.4.1",
+	"Version": "1.4.3",
 	"Category": "PlayMix",
 	"Icon": "icons/playpause",
 	"OS": [{ "Platform": "linux" }],
@@ -55,40 +55,6 @@
 			"Name": "Next",
 			"Icon": "icons/next",
 			"Tooltip": "Go to the next track",
-			"Controllers": ["Keypad"],
-			"States": [{ "Image": "actionDefaultImage" }]
-		},
-		{
-			"UUID": "PlayMix.repeat",
-			"Name": "Repeat",
-			"Icon": "icons/repeat_playlist",
-			"Tooltip": "Cycle the repeat mode",
-			"Controllers": ["Keypad"],
-			"States": [{ "Image": "icons/repeat_none" }, { "Image": "icons/repeat_playlist" }, { "Image": "icons/repeat_track" }],
-			"DisableAutomaticStates": true
-		},
-		{
-			"UUID": "PlayMix.shuffle",
-			"Name": "Shuffle",
-			"Icon": "icons/shuffle_on",
-			"Tooltip": "Toggle shuffle",
-			"Controllers": ["Keypad"],
-			"States": [{ "Image": "icons/shuffle_off" }, { "Image": "icons/shuffle_on" }],
-			"DisableAutomaticStates": true
-		},
-		{
-			"UUID": "PlayMix.seekbackwards",
-			"Name": "Seek Backwards",
-			"Icon": "icons/seek_backwards",
-			"Tooltip": "Seek 10 seconds backwards",
-			"Controllers": ["Keypad"],
-			"States": [{ "Image": "actionDefaultImage" }]
-		},
-		{
-			"UUID": "PlayMix.seekforwards",
-			"Name": "Seek Forwards",
-			"Icon": "icons/seek_forwards",
-			"Tooltip": "Seek 10 seconds forwards",
 			"Controllers": ["Keypad"],
 			"States": [{ "Image": "actionDefaultImage" }]
 		}
