@@ -2,7 +2,7 @@
 
 A Stream Deck plugin for Linux audio control and media playback, featuring per-application volume mixing with dynamic visual feedback.
 
-Based on the [OpenAction MPRIS plugin](https://github.com/OpenActionPlugins/mpris/tree/v1.3.0) by [nekename](https://github.com/nekename).
+Based on the [OpenAction MPRIS plugin](https://github.com/OpenActionPlugins/mpris) by [nekename](https://github.com/nekename).
 
 ### Features
 
