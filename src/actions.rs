@@ -1,4 +1,4 @@
-use super::{get_mpris_proxy, get_album_art, call_mpris_method, update_all, fetch_and_convert_to_data_url, ENCODER_PRESSED, DIAL_STATES};
+use super::{call_mpris_method, update_all, fetch_and_convert_to_data_url, get_album_art_for_sink_input, ENCODER_PRESSED, DIAL_STATES};
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -67,19 +67,20 @@ pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenAct
 		let mut image_set = false;
 		
 		if is_media_app {
-			log::info!("Attempting to fetch album art for media application: {}", app_name);
-			// Try to get MPRIS metadata for album art
-			let proxy_result = get_mpris_proxy().await;
-			let get_property = async |property: &str| match &proxy_result {
-				Ok(proxy) => proxy.get_property(property).await.ok(),
-				Err(_) => None,
+			log::info!("Attempting to fetch album art for media application: {} [{}], sink input: {}", app_name, process_binary, selected);
+			
+			// Use the new matching function that correlates sink inputs with MPRIS instances
+			let app_identifier = if !process_binary.is_empty() {
+				process_binary
+			} else {
+				&app_lower
 			};
 			
-			if let Some(album_art) = get_album_art(get_property("Metadata").await.as_ref()).await {
+			if let Some(album_art) = get_album_art_for_sink_input(selected, app_identifier).await {
 				if let Err(e) = instance.set_image(Some(album_art), None).await {
 					log::warn!("Failed to set album art: {}", e);
 				} else {
-					log::info!("Successfully set album art");
+					log::info!("Successfully set matched album art");
 					image_set = true;
 				}
 			}

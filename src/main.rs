@@ -80,6 +80,144 @@ async fn get_album_art(metadata: Option<&Value<'_>>) -> Option<String> {
 	fetch_and_convert_to_data_url(&url).await.ok()
 }
 
+/// Find all MPRIS players for a given process name (e.g., "brave", "firefox")
+async fn find_mpris_players_for_app(app_name: &str) -> Vec<String> {
+	let conn = match Connection::session().await {
+		Ok(c) => c,
+		Err(_) => return vec![],
+	};
+	
+	let proxy = match Proxy::new(
+		&conn,
+		"org.freedesktop.DBus",
+		"/org/freedesktop/DBus",
+		"org.freedesktop.DBus",
+	)
+	.await {
+		Ok(p) => p,
+		Err(_) => return vec![],
+	};
+
+	let names: Vec<String> = match proxy.call("ListNames", &()).await {
+		Ok(n) => n,
+		Err(_) => return vec![],
+	};
+	
+	let search_pattern = format!("org.mpris.MediaPlayer2.{}", app_name.to_lowercase());
+	names
+		.into_iter()
+		.filter(|name| name.starts_with(&search_pattern))
+		.collect()
+}
+
+/// Try to get album art from a specific MPRIS player instance
+async fn get_album_art_from_player(player_name: &str) -> Option<String> {
+	let conn = Connection::session().await.ok()?;
+	let proxy = Proxy::new(
+		&conn,
+		player_name,
+		"/org/mpris/MediaPlayer2",
+		"org.mpris.MediaPlayer2.Player",
+	)
+	.await.ok()?;
+	
+	let metadata = proxy.get_property("Metadata").await.ok()?;
+	get_album_art(Some(&metadata)).await
+}
+
+/// Get album art for a specific sink input by matching it with the corresponding MPRIS instance
+/// When there are multiple tabs/sources from the same app, this tries to match them by index
+pub async fn get_album_art_for_sink_input(sink_input_id: usize, process_binary: &str) -> Option<String> {
+	// Get full sink input list once
+	let info_output = std::process::Command::new("pactl")
+		.args(&["list", "sink-inputs"])
+		.output()
+		.ok()?;
+	
+	let info = String::from_utf8_lossy(&info_output.stdout);
+	
+	// Parse all sink inputs and filter by process binary
+	let mut sink_inputs: Vec<usize> = Vec::new();
+	let mut current_id: Option<usize> = None;
+	let mut in_matching_app = false;
+	
+	for line in info.lines() {
+		if line.starts_with("Sink Input #") {
+			// Save previous entry if it matches
+			if in_matching_app {
+				if let Some(id) = current_id {
+					sink_inputs.push(id);
+				}
+			}
+			// Reset for new entry
+			current_id = line.trim_start_matches("Sink Input #").parse().ok();
+			in_matching_app = false;
+		} else if line.contains("application.process.binary") {
+			if let Some(binary) = line.split('"').nth(1) {
+				if binary == process_binary {
+					in_matching_app = true;
+				}
+			}
+		}
+	}
+	
+	// Don't forget the last entry
+	if in_matching_app {
+		if let Some(id) = current_id {
+			sink_inputs.push(id);
+		}
+	}
+	
+	sink_inputs.sort(); // Sort to get consistent ordering
+	
+	// Find the index of our sink input
+	let sink_index = sink_inputs.iter().position(|&id| id == sink_input_id)?;
+	
+	log::info!("Sink input {} is at index {} among {} total sink inputs for {} (IDs: {:?})", 
+		sink_input_id, sink_index, sink_inputs.len(), process_binary, sink_inputs);
+	
+	// Get all MPRIS instances for this app, sorted
+	let mut mpris_players = find_mpris_players_for_app(process_binary).await;
+	mpris_players.sort(); // Sort to get consistent ordering
+	
+	log::info!("Found {} MPRIS players for {}: {:?}", mpris_players.len(), process_binary, mpris_players);
+	
+	// If there are more sink inputs than MPRIS players, we can't reliably match them
+	// This happens with Chromium browsers where multiple tabs share one MPRIS interface
+	if sink_inputs.len() > mpris_players.len() {
+		log::warn!("More sink inputs ({}) than MPRIS players ({}) - cannot reliably match tabs to metadata. Skipping album art.", 
+			sink_inputs.len(), mpris_players.len());
+		return None;
+	}
+	
+	// Try to match by index
+	if sink_index < mpris_players.len() {
+		let matched_player = &mpris_players[sink_index];
+		log::info!("Matched sink input {} (index {}) to MPRIS player: {}", sink_input_id, sink_index, matched_player);
+		
+		if let Some(album_art) = get_album_art_from_player(matched_player).await {
+			log::info!("Successfully got album art from matched player {}", matched_player);
+			return Some(album_art);
+		} else {
+			log::warn!("Failed to get album art from matched player {}", matched_player);
+		}
+	} else {
+		log::warn!("Index {} out of range for {} MPRIS players", sink_index, mpris_players.len());
+	}
+	
+	// Fallback: try all instances
+	log::info!("Index matching failed or no album art, trying all {} MPRIS instances as fallback", mpris_players.len());
+	for player in mpris_players {
+		if let Some(album_art) = get_album_art_from_player(&player).await {
+			log::info!("Got fallback album art from {}", player);
+			return Some(album_art);
+		}
+	}
+	
+	log::warn!("No album art found for sink input {} ({})", sink_input_id, process_binary);
+	None
+}
+
 async fn update_play_pause(instance: &Instance, image: Option<String>) -> OpenActionResult<()> {
 	instance.set_image(image, None).await
 }
