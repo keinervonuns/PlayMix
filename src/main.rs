@@ -17,7 +17,7 @@ pub static ENCODER_PRESSED: AtomicBool = AtomicBool::new(false);
 pub static CURRENT_AUDIO_APP_INDEX: AtomicUsize = AtomicUsize::new(0);
 pub static SELECTED_SINK_INPUT: AtomicUsize = AtomicUsize::new(0); // 0 = master volume
 
-async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
+pub async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
 	let bytes = if url.starts_with("data:") {
 		return Ok(url.to_owned());
 	} else if url.starts_with("file:") {
@@ -215,6 +215,7 @@ async fn watch_album_art() {
 				}
 			}
 			for instance in visible_instances(VolumeDialAction::UUID).await {
+				log::info!("Updating dial image for instance {:?}", instance.instance_id);
 				update_dial_image_for_selected_sink(&instance).await.unwrap_or_else(|e| {
 					log::error!("Failed to update dial image: {}", e);
 				});

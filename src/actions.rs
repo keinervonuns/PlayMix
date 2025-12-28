@@ -1,4 +1,4 @@
-use super::{get_mpris_proxy, get_album_art, call_mpris_method, update_all, ENCODER_PRESSED, CURRENT_AUDIO_APP_INDEX, SELECTED_SINK_INPUT};
+use super::{get_mpris_proxy, get_album_art, call_mpris_method, update_all, fetch_and_convert_to_data_url, ENCODER_PRESSED, CURRENT_AUDIO_APP_INDEX, SELECTED_SINK_INPUT};
 
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -8,16 +8,28 @@ use openaction::*;
 /// Updates the dial image based on the currently selected sink input
 pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenActionResult<()> {
 	let selected = SELECTED_SINK_INPUT.load(Ordering::Relaxed);
-	
+	log::info!("Updating dial image for selected sink input ID: {}, instance: {:?}", selected, instance.instance_id);
 	if selected == 0 {
 		// Master volume - set to volume icon
-		if let Ok(icon_path) = std::fs::canonicalize("assets/icons/volume.svg") {
-			log::info!("Setting master volume icon: {}", icon_path.display());
-			if let Err(e) = instance.set_image(Some(format!("file://{}", icon_path.display())), None).await {
-				log::error!("Failed to set master volume icon: {}", e);
+		let image_path = "icons/volume.png";
+		log::info!("Setting master volume icon: {}", image_path);
+		if let Ok(abs_path) = std::fs::canonicalize(image_path) {
+			let file_url = format!("file://{}", abs_path.display());
+			match fetch_and_convert_to_data_url(&file_url).await {
+				Ok(data_url) => {
+					log::info!("Converted to data URL (length: {})", data_url.len());
+					if let Err(e) = instance.set_image(Some(data_url), None).await {
+						log::error!("Failed to set master volume icon: {}", e);
+					} else {
+						log::info!("Successfully set master volume icon");
+					}
+				}
+				Err(e) => {
+					log::error!("Failed to convert {} to data URL: {}", image_path, e);
+				}
 			}
 		} else {
-			log::warn!("Could not find assets/icons/volume.svg");
+			log::error!("Failed to find {}", image_path);
 		}
 		return Ok(());
 	}
@@ -83,13 +95,25 @@ pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenAct
 				if name.is_empty() { continue; }
 				
 				for ext in &["svg", "png", "jpg", "jpeg"] {
-					let icon_path = format!("assets/icons/{}.{}", name, ext);
-					if let Ok(abs_path) = std::fs::canonicalize(&icon_path) {
-						log::info!("Found icon: {}", abs_path.display());
-						if let Err(e) = instance.set_image(Some(format!("file://{}", abs_path.display())), None).await {
-							log::warn!("Failed to set icon: {}", e);
-						} else {
-							log::info!("Successfully set icon");
+					let icon_path = format!("icons/{}.{}", name, ext);
+					// Check if file exists in plugin directory
+					if std::path::Path::new(&icon_path).exists() {
+						log::info!("Found icon: {}", icon_path);
+						if let Ok(abs_path) = std::fs::canonicalize(&icon_path) {
+							let file_url = format!("file://{}", abs_path.display());
+							match fetch_and_convert_to_data_url(&file_url).await {
+								Ok(data_url) => {
+									log::info!("Converted to data URL (length: {})", data_url.len());
+									if let Err(e) = instance.set_image(Some(data_url), None).await {
+										log::warn!("Failed to set icon: {}", e);
+									} else {
+										log::info!("Successfully set icon");
+									}
+								}
+								Err(e) => {
+									log::warn!("Failed to convert {} to data URL: {}", icon_path, e);
+								}
+							}
 						}
 						image_set = true;
 						break;
@@ -99,7 +123,28 @@ pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenAct
 			}
 			
 			if !image_set {
-				log::warn!("No icon found for app: {} [{}]", app_name, process_binary);
+				log::warn!("No icon found for app: {} [{}], using unknown.png", app_name, process_binary);
+				// Use unknown.png as fallback
+				let fallback_path = "icons/unknown.png";
+				log::info!("Setting fallback unknown icon: {}", fallback_path);
+				if let Ok(abs_path) = std::fs::canonicalize(fallback_path) {
+					let file_url = format!("file://{}", abs_path.display());
+					match fetch_and_convert_to_data_url(&file_url).await {
+						Ok(data_url) => {
+							log::info!("Converted to data URL (length: {})", data_url.len());
+							if let Err(e) = instance.set_image(Some(data_url), None).await {
+								log::error!("Failed to set unknown icon: {}", e);
+							} else {
+								log::info!("Successfully set unknown icon");
+							}
+						}
+						Err(e) => {
+							log::error!("Failed to convert {} to data URL: {}", fallback_path, e);
+						}
+					}
+				} else {
+					log::error!("Failed to find {}", fallback_path);
+				}
 			}
 		}
 	} else {
