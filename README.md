@@ -33,6 +33,12 @@ The volume dial automatically displays context-appropriate images:
 - `wpctl` for master volume control
 - MPRIS-compatible media players for metadata/album art
 
+### Hardware & Platform
+
+This plugin is designed for the **Soomfon CN003** Stream Deck alternative and runs on a modified version of the [opendeck-akp05](https://github.com/ambiso/opendeck-akp05) plugin by [ambiso](https://github.com/ambiso).
+
+**Key modification**: Dial presses toggle (press/release events) instead of only sending the down event, enabling press-and-hold detection for mode switching.
+
 ### Included Application Icons
 
 The plugin includes icons for common applications:
