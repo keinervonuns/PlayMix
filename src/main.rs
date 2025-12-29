@@ -19,6 +19,9 @@ pub static ENCODER_PRESSED: AtomicBool = AtomicBool::new(false);
 // Per-instance state: (current_audio_app_index, selected_sink_input)
 pub static DIAL_STATES: Lazy<Mutex<HashMap<String, (usize, usize)>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
+// Remember the last active MPRIS player
+pub static LAST_ACTIVE_PLAYER: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
+
 pub async fn fetch_and_convert_to_data_url(url: &str) -> Result<String> {
 	let bytes = if url.starts_with("data:") {
 		return Ok(url.to_owned());
@@ -47,10 +50,46 @@ async fn find_active_player(conn: &Connection) -> Result<String> {
 	.await?;
 
 	let names: Vec<String> = proxy.call("ListNames", &()).await?;
-	names
+	let mpris_players: Vec<String> = names
 		.into_iter()
-		.find(|name| name.starts_with("org.mpris.MediaPlayer2."))
-		.ok_or_else(|| anyhow::anyhow!("No MPRIS players found"))
+		.filter(|name| name.starts_with("org.mpris.MediaPlayer2.") && name != "org.mpris.MediaPlayer2.playerctld")
+		.collect();
+	
+	// Try to find a player that is actively playing
+	for player_name in &mpris_players {
+		if let Ok(player_proxy) = Proxy::new(
+			conn,
+			player_name.as_str(),
+			"/org/mpris/MediaPlayer2",
+			"org.mpris.MediaPlayer2.Player",
+		).await {
+			if let Ok(status) = player_proxy.get_property::<String>("PlaybackStatus").await {
+				if status == "Playing" {
+					log::info!("Found active player: {} (Playing)", player_name);
+					// Remember this as the last active player
+					*LAST_ACTIVE_PLAYER.lock().unwrap() = Some(player_name.clone());
+					return Ok(player_name.clone());
+				}
+			}
+		}
+	}
+	
+	// If no player is actively playing, try to use the last active one
+	if let Some(last_player) = LAST_ACTIVE_PLAYER.lock().unwrap().clone() {
+		if mpris_players.contains(&last_player) {
+			log::info!("No active player, using last active: {}", last_player);
+			return Ok(last_player);
+		}
+	}
+	
+	// Fallback to first player if none are actively playing and no last player remembered
+	let first_player = mpris_players
+		.into_iter()
+		.next()
+		.ok_or_else(|| anyhow::anyhow!("No MPRIS players found"))?;
+	
+	log::info!("No active or remembered player, using first available: {}", first_player);
+	Ok(first_player)
 }
 
 async fn get_mpris_proxy() -> Result<Proxy<'static>> {
