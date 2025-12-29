@@ -35,9 +35,9 @@ The volume dial automatically displays context-appropriate images:
 
 ### Hardware & Platform
 
-This plugin is designed for the **Soomfon CN003** Stream Deck alternative and runs on a modified version of the [opendeck-akp05](https://github.com/ambiso/opendeck-akp05) plugin by [ambiso](https://github.com/ambiso).
+This plugin is designed for the **Soomfon CN003** Stream Deck alternative and runs on a modified version of the [opendeck-akp05](https://github.com/ambiso/opendeck-akp05) plugin by [ambiso](https://github.com/ambiso) which can be found [here](https://github.com/keinervonuns/opendeck-akp05).
 
-**Key modification**: Dial presses toggle (press/release events) instead of only sending the down event, enabling press-and-hold detection for mode switching.
+**Key modification**: Dial presses toggle (press/release events) instead of only sending the down event when pressed multiple times.
 
 ### Included Application Icons
 
