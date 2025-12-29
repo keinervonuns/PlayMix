@@ -69,14 +69,14 @@ pub async fn update_dial_image_for_selected_sink(instance: &Instance) -> OpenAct
 		if is_media_app {
 			log::info!("Attempting to fetch album art for media application: {} [{}], sink input: {}", app_name, process_binary, selected);
 			
-			// Use the new matching function that correlates sink inputs with MPRIS instances
-			let app_identifier = if !process_binary.is_empty() {
-				process_binary
+			// Map chrome to chromium for MPRIS lookup, but keep original name for sink input filtering
+			let mpris_name = if process_binary == "chrome" {
+				Some("chromium")
 			} else {
-				&app_lower
+				None
 			};
 			
-			if let Some(album_art) = get_album_art_for_sink_input(selected, app_identifier).await {
+			if let Some(album_art) = get_album_art_for_sink_input(selected, process_binary, mpris_name).await {
 				if let Err(e) = instance.set_image(Some(album_art), None).await {
 					log::warn!("Failed to set album art: {}", e);
 				} else {
@@ -372,6 +372,9 @@ impl Action for PlayPauseAction {
 		if let Err(error) = call_mpris_method("PlayPause").await {
 			log::error!("Failed to make PlayPause MPRIS call: {}", error);
 		}
+		// Give the player a moment to update metadata, then refresh
+		tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+		update_all().await;
 		Ok(())
 	}
 }
@@ -410,6 +413,9 @@ impl Action for PreviousAction {
 		if let Err(error) = call_mpris_method("Previous").await {
 			log::error!("Failed to make Previous MPRIS call: {}", error);
 		}
+		// Give the player a moment to update metadata, then refresh
+		tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+		update_all().await;
 		Ok(())
 	}
 }
@@ -429,6 +435,9 @@ impl Action for NextAction {
 		if let Err(error) = call_mpris_method("Next").await {
 			log::error!("Failed to make Next MPRIS call: {}", error);
 		}
+		// Give the player a moment to update metadata, then refresh
+		tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+		update_all().await;
 		Ok(())
 	}
 }

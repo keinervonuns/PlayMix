@@ -166,7 +166,9 @@ async fn get_album_art_from_player(player_name: &str) -> Option<String> {
 
 /// Get album art for a specific sink input by matching it with the corresponding MPRIS instance
 /// When there are multiple tabs/sources from the same app, this tries to match them by index
-pub async fn get_album_art_for_sink_input(sink_input_id: usize, process_binary: &str) -> Option<String> {
+/// process_binary: the actual binary name from pactl (e.g., "chrome")
+/// mpris_name: optional override for MPRIS lookup (e.g., "chromium" for chrome)
+pub async fn get_album_art_for_sink_input(sink_input_id: usize, process_binary: &str, mpris_name: Option<&str>) -> Option<String> {
 	// Get full sink input list once
 	let info_output = std::process::Command::new("pactl")
 		.args(&["list", "sink-inputs"])
@@ -216,16 +218,29 @@ pub async fn get_album_art_for_sink_input(sink_input_id: usize, process_binary: 
 		sink_input_id, sink_index, sink_inputs.len(), process_binary, sink_inputs);
 	
 	// Get all MPRIS instances for this app, sorted
-	let mut mpris_players = find_mpris_players_for_app(process_binary).await;
+	// Use mpris_name override if provided (e.g., "chromium" for "chrome")
+	let mpris_lookup_name = mpris_name.unwrap_or(process_binary);
+	let mut mpris_players = find_mpris_players_for_app(mpris_lookup_name).await;
 	mpris_players.sort(); // Sort to get consistent ordering
 	
-	log::info!("Found {} MPRIS players for {}: {:?}", mpris_players.len(), process_binary, mpris_players);
+	log::info!("Found {} MPRIS players for {} (lookup: {}): {:?}", mpris_players.len(), process_binary, mpris_lookup_name, mpris_players);
 	
-	// If there are more sink inputs than MPRIS players, we can't reliably match them
-	// This happens with Chromium browsers where multiple tabs share one MPRIS interface
+	// If there are no MPRIS players at all, we can't get metadata
+	if mpris_players.is_empty() {
+		log::warn!("No MPRIS players found for {} (lookup: {})", process_binary, mpris_lookup_name);
+		return None;
+	}
+	
+	// If there are more sink inputs than MPRIS players, we can't reliably match by index
+	// but we can still try to get album art from the available MPRIS player(s)
 	if sink_inputs.len() > mpris_players.len() {
-		log::warn!("More sink inputs ({}) than MPRIS players ({}) - cannot reliably match tabs to metadata. Skipping album art.", 
+		log::warn!("More sink inputs ({}) than MPRIS players ({}) - cannot match by index, using first MPRIS player", 
 			sink_inputs.len(), mpris_players.len());
+		// Just use the first MPRIS player
+		if let Some(album_art) = get_album_art_from_player(&mpris_players[0]).await {
+			log::info!("Got album art from first MPRIS player {}", mpris_players[0]);
+			return Some(album_art);
+		}
 		return None;
 	}
 	
