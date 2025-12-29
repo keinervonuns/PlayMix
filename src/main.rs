@@ -306,14 +306,6 @@ async fn watch_album_art() {
 	loop {
 		update_all().await;
 
-		let player_name = match find_active_player(&connection).await {
-			Ok(name) => name,
-			Err(_) => {
-				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-				continue;
-			}
-		};
-
 		let dbus_proxy = match DBusProxy::new(&connection).await {
 			Ok(proxy) => proxy,
 			Err(error) => {
@@ -322,17 +314,18 @@ async fn watch_album_art() {
 			}
 		};
 
+		// Watch ALL MPRIS players, not just the active one
 		let signal_rule = match MatchRule::builder()
 			.msg_type(MessageType::Signal)
 			.interface("org.freedesktop.DBus.Properties")
 			.and_then(|b| b.member("PropertiesChanged"))
 			.and_then(|b| b.path("/org/mpris/MediaPlayer2"))
-			.and_then(|b| b.sender(player_name.as_str()))
 			.map(|b| b.build())
 		{
 			Ok(rule) => rule,
 			Err(error) => {
 				log::error!("Failed to build match rule: {}", error);
+				tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 				continue;
 			}
 		};
@@ -368,11 +361,12 @@ async fn watch_album_art() {
 			let member = header.member().map(|m| m.to_string());
 			if member.as_deref() == Some("NameOwnerChanged") {
 				let body = msg.body();
-				if let Ok((name, _old_owner, new_owner)) = body.deserialize::<(String, String, String)>()
-					&& name == player_name
-					&& new_owner.is_empty()
-				{
-					break;
+				if let Ok((name, _old_owner, new_owner)) = body.deserialize::<(String, String, String)>() {
+					// Check if any MPRIS player was removed
+					if name.starts_with("org.mpris.MediaPlayer2.") && new_owner.is_empty() {
+						log::info!("MPRIS player {} disconnected, refreshing", name);
+						update_all().await;
+					}
 				}
 				continue;
 			} else if member.as_deref() != Some("PropertiesChanged") {
